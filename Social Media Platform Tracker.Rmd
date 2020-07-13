@@ -27,18 +27,74 @@ library(tidyverse)
 
 data <- read_csv("raw-data/tracker_data.csv") %>% 
   clean_names() %>% 
-  select(company, date, type, coronavirus, key_development) %>% 
-  slice(9:122)
+  select(company, date, type, community_help:coronavirus, key_development) %>% 
+  slice(1:387)
 
-data[is.na(data)] = 0
-
-data_clean <- data %>% 
-  mutate( key = ifelse(key_development == 0, 0, 1),
-          date = mdy(date)) %>% 
-  select(- key_development)
+data_pivot <- data %>% 
+  pivot_longer(community_help:coronavirus, names_to = "policy", values_to = "true")
 
 
-ggplot(data_clean, aes(date, company, color = type)) + 
-  geom_point()
+new_data <- data_pivot %>% 
+  select(-key_development) %>% 
+  na.omit() %>% 
+  group_by(company, policy) %>% 
+  count(true) %>% 
+  ungroup() %>% 
+  filter(true == "Yes")
+  
+
+ggplot(new_data, aes(policy, n)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ company)
+
+
+
 ```
+
+```{r}
+
+totals_data <- data %>% 
+  select(company) %>% 
+  count(company) %>% 
+  arrange(desc(n))
+
+totals_graph <- totals_data %>% 
+  ggplot(aes(x = reorder(company, -n), n)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Number of Updates in 2020 by Social Media Platform", x = "", y = "Number of Updates") +
+  theme_fivethirtyeight() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+totals_graph
+
+type_graph <- new_data %>% 
+  filter(company == "Google" | company == "Facebook" | company == "TikTok") %>% 
+  mutate(policy = recode(policy, community_help = "Community Help", information = "Information", 
+                         coronavirus = "Coronavirus", advertisement = "Advertisements",
+                         content_regulation = "Content Regulation", privacy = "Privacy", misinformation = "Misinformation")) %>% 
+  ggplot(aes(fill = company, x = reorder(policy, -n), y = n)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  labs(title = "Social Media Platforms' Updates by Content Category", x = "", y = "Number of Updates", fill = "") +
+  theme_fivethirtyeight() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+type_graph
+
+
+percent_type_graph <- new_data %>% 
+  filter(company == "Google" | company == "Facebook" | company == "TikTok") %>% 
+  mutate(policy = recode(policy, community_help = "Community Help", information = "Information", 
+                         coronavirus = "Coronavirus", advertisement = "Advertisements",
+                         content_regulation = "Content Regulation", privacy = "Privacy", misinformation = "Misinformation")) %>% 
+  group_by(company) %>% 
+  mutate(perc_type = n/sum(n) * 100) %>% 
+  ggplot(aes(fill = company, x = reorder(policy, -perc_type), y = perc_type)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  labs(title = "Social Media Platforms' Updates by Type (Percent)", x = "", y = "Percent of Updates", fill = "") +
+  theme_fivethirtyeight() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+percent_type_graph
+```
+
 
