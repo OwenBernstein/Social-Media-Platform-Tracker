@@ -97,4 +97,19 @@ percent_type_graph <- new_data %>%
 percent_type_graph
 ```
 
+```{r}
+
+data_time <- data %>%
+  mutate(date = mdy(date)) %>% 
+  filter(date >= "2020-01-01" & date <= "2020-07-07") %>% 
+  ggplot(aes(date)) + 
+  geom_freqpoly(bins = 35, pad = F) +
+  labs(title = "Platforms' Updates over Time", x = "Date", y = "Number of Updates") +
+  theme_minimal() 
+
+
+data_time
+```
+
+
 
