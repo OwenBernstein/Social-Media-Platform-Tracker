@@ -18,6 +18,7 @@ library(dotwhisker)
 library(tidytext)
 library(ggthemes)
 library(webshot)
+library(latticeExtra)
 library(tidyverse)
 ```
 
@@ -29,6 +30,21 @@ data <- read_csv("raw-data/tracker_data.csv") %>%
   clean_names() %>% 
   select(company, date, type, community_help:coronavirus, key_development) %>% 
   slice(1:387)
+
+covid_data <- read_csv("raw-data/Covid_US.csv") %>% 
+  clean_names() 
+
+sum_covid_data <- covid_data %>% 
+  filter(country_region == "US") %>% 
+  pivot_longer(x1_22_2020:x7_13_2020, names_to = "date", names_prefix = "x", values_to = "cases") %>% 
+  mutate(date = mdy(date)) %>% 
+  select(date, cases)
+
+change_covid_data <- covid_data %>% 
+  filter(country_region == "Difference") %>% 
+  pivot_longer(x1_22_2020:x7_13_2020, names_to = "date", names_prefix = "x", values_to = "cases") %>% 
+  mutate(date = mdy(date)) %>% 
+  select(date, cases)
 
 data_pivot <- data %>% 
   pivot_longer(community_help:coronavirus, names_to = "policy", values_to = "true")
@@ -99,17 +115,55 @@ percent_type_graph
 
 ```{r}
 
+
 data_time <- data %>%
-  mutate(date = mdy(date)) %>% 
-  filter(date >= "2020-01-01" & date <= "2020-07-07") %>% 
-  ggplot(aes(date)) + 
-  geom_freqpoly(bins = 35, pad = F) +
+  mutate(date = mdy(date)) %>%
+  mutate(date = floor_date(date, "1 week")) %>%
+  count(date)
+
+plat_covid_data <- left_join(data_time, change_covid_data, by = "date")
+
+data_time_graph <- plat_covid_data %>% 
+  ggplot(aes(x = date)) + 
+  geom_line(aes(y = n)) +
   labs(title = "Platforms' Updates over Time", x = "Date", y = "Number of Updates") +
   theme_minimal() 
 
 
-data_time
+xyplot(n + cases ~ date, plat_covid_data, type = "l", col=c("steelblue", "#69b3a2") , lwd=2)
+
+
+plat_time <- xyplot(n ~ date, plat_covid_data, type = "l" , lwd=2, col="steelblue", ylab = "New Platform Updates", xlab = "", main="New Covid-19 Cases and Platform Updates by Week")
+cov_time <- xyplot(cases ~ date, plat_covid_data, type = "l", lwd=2, col='pink', main="New Covid-19 Cases and Platform Updates by Week", xlab = "Date", ylab = "New COVID-19 Cases")
+ 
+
+
+# --> Make the plot with second y axis:
+doubleYScale(plat_time, cov_time, add.ylab2 = TRUE, use.style= FALSE, text = c("Updates", "COVID-19" ))
+
+
+
+data_time_graph
 ```
+
+```{r}
+
+plat_data_time <- data %>%
+  mutate(date = mdy(date)) %>%
+  mutate(date = floor_date(date, "1 week")) %>%
+  group_by(company) %>% 
+  count(date)
+
+data_time_graph <- plat_data_time %>% 
+  filter(company == "Google" | company == "Facebook" | company == "TikTok") %>% 
+  ggplot(aes(x = date, y = n, color = company)) + 
+  geom_line() +
+  labs(title = "Platforms' Updates over Time", x = "Date", y = "Number of Updates") +
+  theme_minimal() 
+
+data_time_graph
+```
+
 
 
 
