@@ -19,38 +19,53 @@ library(tidytext)
 library(ggthemes)
 library(webshot)
 library(latticeExtra)
+library(ggrepel)
 library(tidyverse)
 ```
 
 ```{r}
 
-# Loading Data
+# Reading data from CSV of Google sheet and then only taking rows that have
+# data
 
-data <- read_csv("raw-data/tracker_data.csv") %>% 
+tracker_data <- read_csv("raw-data/tracker_data.csv") %>% 
   clean_names() %>% 
-  select(company, date, type, community_help:coronavirus, key_development) %>% 
-  slice(1:387)
+  select(company, date, type, community_help:coronavirus, key_development, number) %>% 
+  slice(1:436)
+
+# Creating pivoted tracker data to work more easily with tags
+
+tracker_pivot <- tracker_data %>% 
+  pivot_longer(community_help:coronavirus, names_to = "policy",
+               values_to = "true")
+
+# Reading in Covid Us Data
 
 covid_data <- read_csv("raw-data/Covid_US.csv") %>% 
   clean_names() 
 
+# Creating sum Covid data that has total US case count
+
 sum_covid_data <- covid_data %>% 
   filter(country_region == "US") %>% 
-  pivot_longer(x1_22_2020:x7_13_2020, names_to = "date", names_prefix = "x", values_to = "cases") %>% 
+  pivot_longer(x1_22_2020:x7_13_2020, names_to = "date", names_prefix = "x",
+               values_to = "cases") %>% 
   mutate(date = mdy(date)) %>% 
   select(date, cases)
+
+# Creating change Covid data that has new US cases by day
 
 change_covid_data <- covid_data %>% 
   filter(country_region == "Difference") %>% 
-  pivot_longer(x1_22_2020:x7_13_2020, names_to = "date", names_prefix = "x", values_to = "cases") %>% 
+  pivot_longer(x1_22_2020:x7_13_2020, names_to = "date", names_prefix = "x",
+               values_to = "cases") %>% 
   mutate(date = mdy(date)) %>% 
   select(date, cases)
 
-data_pivot <- data %>% 
-  pivot_longer(community_help:coronavirus, names_to = "policy", values_to = "true")
+# Creating tag data. This has the number of each type of update for each
+# company
 
-
-new_data <- data_pivot %>% 
+tag_data <- tracker_pivot %>% 
   select(-key_development) %>% 
   na.omit() %>% 
   group_by(company, policy) %>% 
@@ -58,111 +73,235 @@ new_data <- data_pivot %>%
   ungroup() %>% 
   filter(true == "Yes")
   
-
-ggplot(new_data, aes(policy, n)) +
-  geom_bar(stat = "identity") +
-  facet_wrap(~ company)
-
-
-
 ```
 
 ```{r}
 
-totals_data <- data %>% 
+# Creating total updates data. Includes the total number of updates for each
+# company
+
+total_updates <- tracker_data %>% 
   select(company) %>% 
   count(company) %>% 
   arrange(desc(n))
 
-totals_graph <- totals_data %>% 
+# Graph of number of updates by company
+
+totals_graph <- total_updates %>% 
   ggplot(aes(x = reorder(company, -n), n)) +
   geom_bar(stat = "identity") +
-  labs(title = "Number of Updates in 2020 by Social Media Platform", x = "", y = "Number of Updates") +
+  labs(title = "Number of Updates in 2020 by Social Media Platform", x = "",
+       y = "Number of Updates") +
   theme_fivethirtyeight() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 totals_graph
 
-type_graph <- new_data %>% 
+# Graph of quantity of each type of update by comapny
+
+type_graph <- tag_data %>% 
   filter(company == "Google" | company == "Facebook" | company == "TikTok") %>% 
-  mutate(policy = recode(policy, community_help = "Community Help", information = "Information", 
-                         coronavirus = "Coronavirus", advertisement = "Advertisements",
-                         content_regulation = "Content Regulation", privacy = "Privacy", misinformation = "Misinformation")) %>% 
+  mutate(policy = recode(policy, community_help = "Community Help",
+                         information = "Information",
+                         coronavirus = "Coronavirus",
+                         advertisement = "Advertisements",
+                         content_regulation = "Content Regulation",
+                         privacy = "Privacy",
+                         misinformation = "Misinformation")) %>% 
   ggplot(aes(fill = company, x = reorder(policy, -n), y = n)) +
   geom_bar(position = "dodge", stat = "identity") +
-  labs(title = "Social Media Platforms' Updates by Content Category", x = "", y = "Number of Updates", fill = "") +
+  labs(title = "Social Media Platforms' Updates by Content Category", x = "",
+       y = "Number of Updates", fill = "") +
   theme_fivethirtyeight() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 type_graph
 
+# Graph of percent of each type of update by company
 
-percent_type_graph <- new_data %>% 
-  filter(company == "Google" | company == "Facebook" | company == "TikTok") %>% 
-  mutate(policy = recode(policy, community_help = "Community Help", information = "Information", 
-                         coronavirus = "Coronavirus", advertisement = "Advertisements",
-                         content_regulation = "Content Regulation", privacy = "Privacy", misinformation = "Misinformation")) %>% 
+percent_type_graph_1 <- tag_data %>% 
+  filter(company == "Google" | company == "Facebook" | company == "TikTok" |
+           company == "LinkedIn") %>% 
+  mutate(policy = recode(policy, community_help = "Community Help",
+                         information = "Information", 
+                         coronavirus = "Coronavirus",
+                         advertisement = "Advertisements",
+                         content_regulation = "Content Regulation",
+                         privacy = "Privacy",
+                         misinformation = "Misinformation")) %>% 
   group_by(company) %>% 
   mutate(perc_type = n/sum(n) * 100) %>% 
   ggplot(aes(fill = company, x = reorder(policy, -perc_type), y = perc_type)) +
   geom_bar(position = "dodge", stat = "identity") +
-  labs(title = "Social Media Platforms' Updates by Type (Percent)", x = "", y = "Percent of Updates", fill = "") +
+  labs(title = "Social Media Platforms' Updates by Type (Percent)", x = "",
+       y = "Percent of Updates", fill = "") +
   theme_fivethirtyeight() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-percent_type_graph
+percent_type_graph_2 <- tag_data %>% 
+  filter(company == "Twitter" | company == "Apple" | company == "Instagram" |
+           company == "LinkedIn") %>% 
+  mutate(policy = recode(policy, community_help = "Community Help",
+                         information = "Information", 
+                         coronavirus = "Coronavirus",
+                         advertisement = "Advertisements",
+                         content_regulation = "Content Regulation",
+                         privacy = "Privacy",
+                         misinformation = "Misinformation")) %>% 
+  group_by(company) %>% 
+  mutate(perc_type = n/sum(n) * 100) %>% 
+  ggplot(aes(fill = company, x = reorder(policy, -perc_type), y = perc_type)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  labs(title = "Social Media Platforms' Updates by Type (Percent)", x = "",
+       y = "Percent of Updates", fill = "") +
+  theme_fivethirtyeight() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+percent_type_graph_3 <- tag_data %>% 
+  filter(company == "Reddit" | company == "WhatsApp" | company == "Pinterest" |
+           company == "Snapchat" | company == "Nextdoor") %>% 
+  mutate(policy = recode(policy, community_help = "Community Help",
+                         information = "Information", 
+                         coronavirus = "Coronavirus",
+                         advertisement = "Advertisements",
+                         content_regulation = "Content Regulation",
+                         privacy = "Privacy",
+                         misinformation = "Misinformation")) %>% 
+  group_by(company) %>% 
+  mutate(perc_type = n/sum(n) * 100) %>% 
+  ggplot(aes(fill = company, x = reorder(policy, -perc_type), y = perc_type)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  labs(title = "Social Media Platforms' Updates by Type (Percent)", x = "",
+       y = "Percent of Updates", fill = "") +
+  theme_fivethirtyeight() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+percent_type_graph_1
+percent_type_graph_2
+percent_type_graph_3
 ```
 
 ```{r}
 
+# Creating updates time which is the number of updates per week
 
-data_time <- data %>%
+updates_time <- tracker_data %>%
   mutate(date = mdy(date)) %>%
   mutate(date = floor_date(date, "1 week")) %>%
-  count(date)
+  count(date) %>% 
+  slice(2:27)
 
-plat_covid_data <- left_join(data_time, change_covid_data, by = "date")
+# Left joining change covid data and updates time by date. This results in the
+# number of updates in the week and the number of new cases in the US on the
+# last day of the week. (Should change to average new cases for the week)
+
+plat_covid_data <- left_join(updates_time, change_covid_data, by = "date")
+
+# Graph of new platform updates by week over time
 
 data_time_graph <- plat_covid_data %>% 
   ggplot(aes(x = date)) + 
   geom_line(aes(y = n)) +
-  labs(title = "Platforms' Updates over Time", x = "Date", y = "Number of Updates") +
+  labs(title = "Platforms' Updates over Time", x = "Date",
+       y = "Number of Updates") +
   theme_minimal() 
 
+# Creating plot of new platform updates and a plot new US COVID-19 cases over
+# time. then combining the plots on a double y axis plot
 
-xyplot(n + cases ~ date, plat_covid_data, type = "l", col=c("steelblue", "#69b3a2") , lwd=2)
+plat_time <- xyplot(n ~ date, plat_covid_data, type = "l" , lwd=2,
+                    col="steelblue", ylab = "New Platform Updates", xlab = "",
+                    main="New Covid-19 Cases and Platform Updates by Week")
 
-
-plat_time <- xyplot(n ~ date, plat_covid_data, type = "l" , lwd=2, col="steelblue", ylab = "New Platform Updates", xlab = "", main="New Covid-19 Cases and Platform Updates by Week")
-cov_time <- xyplot(cases ~ date, plat_covid_data, type = "l", lwd=2, col='pink', main="New Covid-19 Cases and Platform Updates by Week", xlab = "Date", ylab = "New COVID-19 Cases")
+cov_time <- xyplot(cases ~ date, plat_covid_data, type = "l", lwd=2,
+                   col='pink',
+                   main="New Covid-19 Cases and Platform Updates by Week",
+                   xlab = "Date", ylab = "New COVID-19 Cases")
  
+double_y_graph <- doubleYScale(plat_time, cov_time, add.ylab2 = TRUE,
+                               use.style= FALSE, text = c("Updates",
+                                                          "COVID-19" ))
 
-
-# --> Make the plot with second y axis:
-doubleYScale(plat_time, cov_time, add.ylab2 = TRUE, use.style= FALSE, text = c("Updates", "COVID-19" ))
-
-
-
-data_time_graph
+double_y_graph
 ```
 
 ```{r}
 
-plat_data_time <- data %>%
+# Creating plat updates time. This has the number of updates each week for each
+# platform
+
+plat_updates_time <- tracker_data %>%
   mutate(date = mdy(date)) %>%
   mutate(date = floor_date(date, "1 week")) %>%
   group_by(company) %>% 
   count(date)
 
-data_time_graph <- plat_data_time %>% 
+# Graph of updates each week for each company
+
+plat_updates_time_graph <- plat_updates_time %>% 
   filter(company == "Google" | company == "Facebook" | company == "TikTok") %>% 
   ggplot(aes(x = date, y = n, color = company)) + 
   geom_line() +
-  labs(title = "Platforms' Updates over Time", x = "Date", y = "Number of Updates") +
+  labs(title = "Platforms' Updates over Time", x = "Date",
+       y = "Number of Updates") +
   theme_minimal() 
 
-data_time_graph
+plat_updates_time_graph
+
+# Cumulative frequency graph of platforms' updates over time
+
+cumulative_freq <- tracker_data %>% 
+  filter(company == "Facebook" | company == "Google" | company == "TikTok") %>% 
+  mutate(date = mdy(date)) %>% 
+  ggplot(aes(date, number, color = company)) +
+  stat_ecdf(geom = "line") +
+  theme_minimal() +
+  labs(title = "Cumulative Frequency of Platform Updates", x = "",
+       y = "Portion of Updates", color = "")
+
+cumulative_freq
 ```
+
+```{r}
+
+# Creating a graph of the total updates of each company by their monthly active
+# users
+
+update_mau <- total_updates %>% 
+  mutate(mau = c(2000, 800, 2498, 2000, 386, 1400, 1000, 260, 330, 2000, 366,
+                 398, 27)) %>% 
+  ggplot(aes(mau, n)) +
+  geom_point() +
+  geom_smooth(method = "glm") +
+  labs(title = "Number of Updates by Monthly Active Users",
+       x = "Monthly Active Users (Millions)", y = "Number of Updates") +
+  theme_minimal() +
+  geom_label_repel(aes(label = as.character(company)), size = 2.6,
+                  box.padding   = 0.8, 
+                  point.padding = 0.3,
+                  color = "black")
+
+update_mau
+
+tracker_pivot %>% 
+  filter(policy == "coronavirus" & true == "Yes") %>% 
+  select(company, date, policy, true) %>%
+  mutate(date = mdy(date)) %>%
+  mutate(date = floor_date(date, "1 week")) %>%
+  count(date) %>% 
+  ggplot(aes(x = date, n)) + 
+  geom_line() +
+  geom_smooth(se = FALSE)
+
+
+
+ggplot(aes(x = date)) + 
+  geom_line(aes(y = n)) +
+  labs(title = "Platforms' Updates over Time", x = "Date",
+       y = "Number of Updates") +
+  theme_minimal()
+```
+
 
 
 
