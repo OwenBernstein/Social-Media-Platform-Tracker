@@ -8,6 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
+options(scipen = 30)
 
 library(gt)
 library(broom)
@@ -30,8 +31,8 @@ library(tidyverse)
 
 tracker_data <- read_csv("raw-data/tracker_data.csv") %>% 
   clean_names() %>% 
-  select(company, date, type, community_help:coronavirus, key_development, number) %>% 
-  slice(1:436)
+  select(company, date, type, community_help:coronavirus, key_development) %>% 
+  slice(1:442)
 
 # Creating pivoted tracker data to work more easily with tags
 
@@ -41,22 +42,22 @@ tracker_pivot <- tracker_data %>%
 
 # Reading in Covid Us Data
 
-covid_data <- read_csv("raw-data/Covid_US.csv") %>% 
-  clean_names() 
+covid_data <- read_csv("raw-data/covid_data.csv") %>% 
+  clean_names()
 
-# Creating sum Covid data that has total US case count
+# Creating change Covid data that has new US cases by day
 
-sum_covid_data <- covid_data %>% 
-  filter(country_region == "US") %>% 
+change_covid_data <- covid_data %>% 
+  filter(country_region == "us_dif") %>% 
   pivot_longer(x1_22_2020:x7_13_2020, names_to = "date", names_prefix = "x",
                values_to = "cases") %>% 
   mutate(date = mdy(date)) %>% 
   select(date, cases)
 
-# Creating change Covid data that has new US cases by day
+# Creating covid_world_change that has new World cases by day
 
-change_covid_data <- covid_data %>% 
-  filter(country_region == "Difference") %>% 
+covid_world_change  <- covid_data %>% 
+  filter(country_region == "world_dif") %>% 
   pivot_longer(x1_22_2020:x7_13_2020, names_to = "date", names_prefix = "x",
                values_to = "cases") %>% 
   mutate(date = mdy(date)) %>% 
@@ -140,7 +141,7 @@ percent_type_graph_1 <- tag_data %>%
 
 percent_type_graph_2 <- tag_data %>% 
   filter(company == "Twitter" | company == "Apple" | company == "Instagram" |
-           company == "LinkedIn") %>% 
+           company == "LinkedIn" | company == "Youtube") %>% 
   mutate(policy = recode(policy, community_help = "Community Help",
                          information = "Information", 
                          coronavirus = "Coronavirus",
@@ -191,76 +192,81 @@ updates_time <- tracker_data %>%
   count(date) %>% 
   slice(2:27)
 
+us_covid_week <- change_covid_data %>%
+  mutate(date = floor_date(date, "1 week")) %>%
+  group_by(date) %>% 
+  summarise(sum(cases))
+
 # Left joining change covid data and updates time by date. This results in the
 # number of updates in the week and the number of new cases in the US on the
 # last day of the week. (Should change to average new cases for the week)
 
-plat_covid_data <- left_join(updates_time, change_covid_data, by = "date")
-
-# Graph of new platform updates by week over time
-
-data_time_graph <- plat_covid_data %>% 
-  ggplot(aes(x = date)) + 
-  geom_line(aes(y = n)) +
-  labs(title = "Platforms' Updates over Time", x = "Date",
-       y = "Number of Updates") +
-  theme_minimal() 
+plat_covid_data <- left_join(updates_time, us_covid_week, by = "date") %>% 
+  replace_na(list('sum(cases)' = 0)) %>% 
+  rename(cases = 'sum(cases)', updates = n)
+  
 
 # Creating plot of new platform updates and a plot new US COVID-19 cases over
 # time. then combining the plots on a double y axis plot
 
-plat_time <- xyplot(n ~ date, plat_covid_data, type = "l" , lwd=2,
-                    col="steelblue", ylab = "New Platform Updates", xlab = "",
-                    main="New Covid-19 Cases and Platform Updates by Week")
+plat_time <- xyplot(updates ~ date, plat_covid_data, type = "l" , lwd=2,
+                    col="steelblue", ylab = "", xlab = "",
+                    main="New US Covid-19 Cases and Platform Updates by Week")
 
 cov_time <- xyplot(cases ~ date, plat_covid_data, type = "l", lwd=2,
                    col='pink',
-                   main="New Covid-19 Cases and Platform Updates by Week",
-                   xlab = "Date", ylab = "New COVID-19 Cases")
+                   main="New US Covid-19 Cases and Platform Updates by Week",
+                   xlab = "Date", ylab = "New US COVID-19 Cases")
  
-double_y_graph <- doubleYScale(plat_time, cov_time, add.ylab2 = TRUE,
-                               use.style= FALSE, text = c("Updates",
-                                                          "COVID-19" ))
+double_y_graph <- doubleYScale(plat_time, cov_time,
+                               use.style= FALSE, text = c("New Platform Updates",
+                                                          "New COVID-19 Cases"))
+
+double_y_graph
+```
+```{r}
+
+# Creating updates time which is the number of updates per week
+
+updates_time <- tracker_data %>%
+  mutate(date = mdy(date)) %>%
+  mutate(date = floor_date(date, "1 week")) %>%
+  count(date) %>% 
+  slice(2:27)
+
+world_covid_week <- covid_world_change %>%
+  mutate(date = floor_date(date, "1 week")) %>%
+  group_by(date) %>% 
+  summarise(sum(cases))
+
+# Left joining change covid data and updates time by date. This results in the
+# number of updates in the week and the number of new cases in the US on the
+# last day of the week. (Should change to average new cases for the week)
+
+plat_covid_data <- left_join(updates_time, world_covid_week, by = "date") %>% 
+  replace_na(list('sum(cases)' = 0)) %>% 
+  rename(cases = 'sum(cases)', updates = n)
+  
+
+# Creating plot of new platform updates and a plot new US COVID-19 cases over
+# time. then combining the plots on a double y axis plot
+
+plat_time <- xyplot(updates ~ date, plat_covid_data, type = "l" , lwd=2,
+                    col="steelblue", ylab = "", xlab = "",
+                    main="New Global Covid-19 Cases and Platform Updates by Week")
+
+cov_time <- xyplot(cases ~ date, plat_covid_data, type = "l", lwd=2,
+                   col='pink',
+                   main="New Global Covid-19 Cases and Platform Updates by Week",
+                   xlab = "Date", ylab = "New World COVID-19 Cases")
+ 
+double_y_graph <- doubleYScale(plat_time, cov_time,
+                               use.style= FALSE, text = c("New Platform Updates",
+                                                          "New Global COVID-19 Cases" ))
 
 double_y_graph
 ```
 
-```{r}
-
-# Creating plat updates time. This has the number of updates each week for each
-# platform
-
-plat_updates_time <- tracker_data %>%
-  mutate(date = mdy(date)) %>%
-  mutate(date = floor_date(date, "1 week")) %>%
-  group_by(company) %>% 
-  count(date)
-
-# Graph of updates each week for each company
-
-plat_updates_time_graph <- plat_updates_time %>% 
-  filter(company == "Google" | company == "Facebook" | company == "TikTok") %>% 
-  ggplot(aes(x = date, y = n, color = company)) + 
-  geom_line() +
-  labs(title = "Platforms' Updates over Time", x = "Date",
-       y = "Number of Updates") +
-  theme_minimal() 
-
-plat_updates_time_graph
-
-# Cumulative frequency graph of platforms' updates over time
-
-cumulative_freq <- tracker_data %>% 
-  filter(company == "Facebook" | company == "Google" | company == "TikTok") %>% 
-  mutate(date = mdy(date)) %>% 
-  ggplot(aes(date, number, color = company)) +
-  stat_ecdf(geom = "line") +
-  theme_minimal() +
-  labs(title = "Cumulative Frequency of Platform Updates", x = "",
-       y = "Portion of Updates", color = "")
-
-cumulative_freq
-```
 
 ```{r}
 
@@ -282,24 +288,6 @@ update_mau <- total_updates %>%
                   color = "black")
 
 update_mau
-
-tracker_pivot %>% 
-  filter(policy == "coronavirus" & true == "Yes") %>% 
-  select(company, date, policy, true) %>%
-  mutate(date = mdy(date)) %>%
-  mutate(date = floor_date(date, "1 week")) %>%
-  count(date) %>% 
-  ggplot(aes(x = date, n)) + 
-  geom_line() +
-  geom_smooth(se = FALSE)
-
-
-
-ggplot(aes(x = date)) + 
-  geom_line(aes(y = n)) +
-  labs(title = "Platforms' Updates over Time", x = "Date",
-       y = "Number of Updates") +
-  theme_minimal()
 ```
 
 
