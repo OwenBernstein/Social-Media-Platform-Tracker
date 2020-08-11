@@ -274,8 +274,8 @@ double_y_graph
 # users
 
 update_mau <- total_updates %>% 
-  mutate(mau = c(2000, 800, 2498, 2000, 386, 1400, 1000, 260, 330, 2000, 366,
-                 398, 27)) %>% 
+  mutate(mau = c(2000, 800, 2603, 326, 2000, 1400, 1082, 260, 430, 2000, 397,
+                 367, 27)) %>% 
   ggplot(aes(mau, n)) +
   geom_point() +
   geom_smooth(method = "glm") +
