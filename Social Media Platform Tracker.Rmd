@@ -8,7 +8,11 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
+# Changing options to reduce scientific notation
+
 options(scipen = 30)
+
+# Loading packages
 
 library(gt)
 library(broom)
@@ -40,7 +44,7 @@ tracker_pivot <- tracker_data %>%
   pivot_longer(community_help:coronavirus, names_to = "policy",
                values_to = "true")
 
-# Reading in Covid Us Data
+# Reading in COVID-19 data
 
 covid_data <- read_csv("raw-data/covid_data.csv") %>% 
   clean_names()
@@ -192,22 +196,25 @@ updates_time <- tracker_data %>%
   count(date) %>% 
   slice(2:27)
 
+# Creating us_covid_week which is the average number of new cases per day
+# for each week
+
 us_covid_week <- change_covid_data %>%
   mutate(date = floor_date(date, "1 week")) %>%
   group_by(date) %>% 
-  summarise(sum(cases))
+  summarise(sum(cases)/7)
 
 # Left joining change covid data and updates time by date. This results in the
-# number of updates in the week and the number of new cases in the US on the
-# last day of the week. (Should change to average new cases for the week)
+# number of updates in the week and the number of average number of new cases
+# in the US per day for the week.
 
 plat_covid_data <- left_join(updates_time, us_covid_week, by = "date") %>% 
-  replace_na(list('sum(cases)' = 0)) %>% 
-  rename(cases = 'sum(cases)', updates = n)
+  replace_na(list('sum(cases)/7' = 0)) %>% 
+  rename(cases = 'sum(cases)/7', updates = n)
   
 
 # Creating plot of new platform updates and a plot new US COVID-19 cases over
-# time. then combining the plots on a double y axis plot
+# time. Then combining the plots on a double y axis plot
 
 plat_time <- xyplot(updates ~ date, plat_covid_data, type = "l" , lwd=2,
                     col="steelblue", ylab = "", xlab = "",
@@ -224,32 +231,28 @@ double_y_graph <- doubleYScale(plat_time, cov_time,
 
 double_y_graph
 ```
+
 ```{r}
 
-# Creating updates time which is the number of updates per week
-
-updates_time <- tracker_data %>%
-  mutate(date = mdy(date)) %>%
-  mutate(date = floor_date(date, "1 week")) %>%
-  count(date) %>% 
-  slice(2:27)
+# Creating world_covid_week which is the average number of new cases per day
+# for each week
 
 world_covid_week <- covid_world_change %>%
   mutate(date = floor_date(date, "1 week")) %>%
   group_by(date) %>% 
-  summarise(sum(cases))
+  summarise(sum(cases)/7)
 
 # Left joining change covid data and updates time by date. This results in the
-# number of updates in the week and the number of new cases in the US on the
-# last day of the week. (Should change to average new cases for the week)
+# number of updates in the week and the average number of new cases per day in
+# the world on the last day of the week.
 
 plat_covid_data <- left_join(updates_time, world_covid_week, by = "date") %>% 
-  replace_na(list('sum(cases)' = 0)) %>% 
-  rename(cases = 'sum(cases)', updates = n)
+  replace_na(list('sum(cases)/7' = 0)) %>% 
+  rename(cases = 'sum(cases)/7', updates = n)
   
 
-# Creating plot of new platform updates and a plot new US COVID-19 cases over
-# time. then combining the plots on a double y axis plot
+# Creating plot of new platform updates and a plot new World COVID-19 cases over
+# time. Then combining the plots on a double y axis plot
 
 plat_time <- xyplot(updates ~ date, plat_covid_data, type = "l" , lwd=2,
                     col="steelblue", ylab = "", xlab = "",
